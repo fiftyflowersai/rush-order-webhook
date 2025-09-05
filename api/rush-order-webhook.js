@@ -1,86 +1,86 @@
 export default async function handler(req, res) {
-  // Enable CORS for all origins during testing
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method === 'POST') {
     try {
-      // Handle form data from FormData
+      // Parse the raw body manually since FormData isn't automatically parsed
       let formData = {};
       
-      if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-        // Parse URL-encoded form data
-        const body = req.body;
-        if (typeof body === 'string') {
-          const params = new URLSearchParams(body);
+      if (req.body) {
+        // If body exists, use it
+        formData = req.body;
+      } else {
+        // If no body, try to parse from raw data
+        const rawBody = req.read();
+        if (rawBody) {
+          const bodyStr = rawBody.toString();
+          const params = new URLSearchParams(bodyStr);
           for (const [key, value] of params) {
             formData[key] = value;
           }
-        } else {
-          formData = body;
         }
-      } else {
-        // Use req.body directly for JSON
-        formData = req.body || {};
       }
 
-      const {
-        event_date = '',
-        delivery_date = '',
-        products = '',
-        name = '',
-        email = '',
-        phone = '',
-        billing_address_1 = '',
-        billing_address_2 = '',
-        billing_city = '',
-        billing_state = '',
-        billing_zip = '',
-        billing_country = '',
-        shipping_address_1 = '',
-        shipping_address_2 = '',
-        shipping_city = '',
-        shipping_state = '',
-        shipping_zip = '',
-        shipping_country = ''
-      } = formData;
+      // Log for debugging
+      console.log('Received form data:', formData);
 
-      // Check if we have required data
+      // Extract data with fallbacks
+      const eventDate = formData.event_date || '';
+      const deliveryDate = formData.delivery_date || '';
+      const products = formData.products || '';
+      const name = formData.name || '';
+      const email = formData.email || '';
+      const phone = formData.phone || '';
+      const billingAddress1 = formData.billing_address_1 || '';
+      const billingAddress2 = formData.billing_address_2 || '';
+      const billingCity = formData.billing_city || '';
+      const billingState = formData.billing_state || '';
+      const billingZip = formData.billing_zip || '';
+      const billingCountry = formData.billing_country || '';
+      const shippingAddress1 = formData.shipping_address_1 || '';
+      const shippingAddress2 = formData.shipping_address_2 || '';
+      const shippingCity = formData.shipping_city || '';
+      const shippingState = formData.shipping_state || '';
+      const shippingZip = formData.shipping_zip || '';
+      const shippingCountry = formData.shipping_country || '';
+
+      // Check required fields
       if (!name || !email) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Missing required fields: name and email are required' 
+          message: 'Missing required fields: name and email' 
         });
       }
 
       // Create email content
-      const subject = `RUSH ORDER REQUEST - Event: ${event_date}`;
+      const subject = `RUSH ORDER REQUEST - Event: ${eventDate}`;
       
       let message = "RUSH ORDER REQUEST\n\n";
-      message += `Event Date: ${event_date}\n`;
-      message += `Delivery Date: ${delivery_date}\n`;
+      message += `Event Date: ${eventDate}\n`;
+      message += `Delivery Date: ${deliveryDate}\n`;
       message += `Customer: ${name}\n`;
       message += `Email: ${email}\n`;
       message += `Phone: ${phone}\n`;
       message += `Products: ${products}\n\n`;
       
       message += "BILLING ADDRESS:\n";
-      message += `${billing_address_1}\n`;
-      if (billing_address_2) message += `${billing_address_2}\n`;
-      message += `${billing_city}, ${billing_state} ${billing_zip}\n`;
-      message += `${billing_country}\n\n`;
+      message += `${billingAddress1}\n`;
+      if (billingAddress2) message += `${billingAddress2}\n`;
+      message += `${billingCity}, ${billingState} ${billingZip}\n`;
+      message += `${billingCountry}\n\n`;
       
       message += "SHIPPING ADDRESS:\n";
-      message += `${shipping_address_1}\n`;
-      if (shipping_address_2) message += `${shipping_address_2}\n`;
-      message += `${shipping_city}, ${shipping_state} ${shipping_zip}\n`;
-      message += `${shipping_country}\n`;
+      message += `${shippingAddress1}\n`;
+      if (shippingAddress2) message += `${shippingAddress2}\n`;
+      message += `${shippingCity}, ${shippingState} ${shippingZip}\n`;
+      message += `${shippingCountry}\n`;
 
       // SendGrid API call
       const data = {
@@ -133,7 +133,7 @@ export default async function handler(req, res) {
         });
       }
     } catch (error) {
-      console.error('Server error:', error);
+      console.error('Error:', error);
       return res.status(500).json({ 
         success: false, 
         message: 'Server error', 
