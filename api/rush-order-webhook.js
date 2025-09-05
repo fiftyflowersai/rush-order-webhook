@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Enable CORS
+  // Enable CORS for all origins during testing
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,76 +10,106 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const {
-      event_date,
-      delivery_date,
-      products,
-      name,
-      email,
-      phone,
-      billing_address_1,
-      billing_address_2,
-      billing_city,
-      billing_state,
-      billing_zip,
-      billing_country,
-      shipping_address_1,
-      shipping_address_2,
-      shipping_city,
-      shipping_state,
-      shipping_zip,
-      shipping_country
-    } = req.body;
-
-    // Create email content
-    const subject = `RUSH ORDER REQUEST - Event: ${event_date}`;
-    
-    let message = "RUSH ORDER REQUEST\n\n";
-    message += `Event Date: ${event_date}\n`;
-    message += `Delivery Date: ${delivery_date}\n`;
-    message += `Customer: ${name}\n`;
-    message += `Email: ${email}\n`;
-    message += `Phone: ${phone}\n`;
-    message += `Products: ${products}\n\n`;
-    
-    message += "BILLING ADDRESS:\n";
-    message += `${billing_address_1}\n`;
-    if (billing_address_2) message += `${billing_address_2}\n`;
-    message += `${billing_city}, ${billing_state} ${billing_zip}\n`;
-    message += `${billing_country}\n\n`;
-    
-    message += "SHIPPING ADDRESS:\n";
-    message += `${shipping_address_1}\n`;
-    if (shipping_address_2) message += `${shipping_address_2}\n`;
-    message += `${shipping_city}, ${shipping_state} ${shipping_zip}\n`;
-    message += `${shipping_country}\n`;
-
-    // SendGrid API call
-    const data = {
-      personalizations: [{
-        to: [{ email: 'cservice@fiftyflowers.com' }],
-        subject: subject
-      }],
-      from: {
-        email: 'baylorharrison@fiftyflowers.com',
-        name: 'Rush Order System'
-      },
-      reply_to: {
-        email: email,
-        name: name
-      },
-      content: [{
-        type: 'text/plain',
-        value: message
-      }]
-    };
-
-    const apiKey = process.env.SENDGRID_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ success: false, message: 'API key not configured' });
-    }
-
     try {
+      // Handle form data from FormData
+      let formData = {};
+      
+      if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+        // Parse URL-encoded form data
+        const body = req.body;
+        if (typeof body === 'string') {
+          const params = new URLSearchParams(body);
+          for (const [key, value] of params) {
+            formData[key] = value;
+          }
+        } else {
+          formData = body;
+        }
+      } else {
+        // Use req.body directly for JSON
+        formData = req.body || {};
+      }
+
+      const {
+        event_date = '',
+        delivery_date = '',
+        products = '',
+        name = '',
+        email = '',
+        phone = '',
+        billing_address_1 = '',
+        billing_address_2 = '',
+        billing_city = '',
+        billing_state = '',
+        billing_zip = '',
+        billing_country = '',
+        shipping_address_1 = '',
+        shipping_address_2 = '',
+        shipping_city = '',
+        shipping_state = '',
+        shipping_zip = '',
+        shipping_country = ''
+      } = formData;
+
+      // Check if we have required data
+      if (!name || !email) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Missing required fields: name and email are required' 
+        });
+      }
+
+      // Create email content
+      const subject = `RUSH ORDER REQUEST - Event: ${event_date}`;
+      
+      let message = "RUSH ORDER REQUEST\n\n";
+      message += `Event Date: ${event_date}\n`;
+      message += `Delivery Date: ${delivery_date}\n`;
+      message += `Customer: ${name}\n`;
+      message += `Email: ${email}\n`;
+      message += `Phone: ${phone}\n`;
+      message += `Products: ${products}\n\n`;
+      
+      message += "BILLING ADDRESS:\n";
+      message += `${billing_address_1}\n`;
+      if (billing_address_2) message += `${billing_address_2}\n`;
+      message += `${billing_city}, ${billing_state} ${billing_zip}\n`;
+      message += `${billing_country}\n\n`;
+      
+      message += "SHIPPING ADDRESS:\n";
+      message += `${shipping_address_1}\n`;
+      if (shipping_address_2) message += `${shipping_address_2}\n`;
+      message += `${shipping_city}, ${shipping_state} ${shipping_zip}\n`;
+      message += `${shipping_country}\n`;
+
+      // SendGrid API call
+      const data = {
+        personalizations: [{
+          to: [{ email: 'cservice@fiftyflowers.com' }],
+          subject: subject
+        }],
+        from: {
+          email: 'baylorharrison@fiftyflowers.com',
+          name: 'Rush Order System'
+        },
+        reply_to: {
+          email: email,
+          name: name
+        },
+        content: [{
+          type: 'text/plain',
+          value: message
+        }]
+      };
+
+      const apiKey = process.env.SENDGRID_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'SendGrid API key not configured' 
+        });
+      }
+
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
@@ -90,15 +120,30 @@ export default async function handler(req, res) {
       });
 
       if (response.ok) {
-        return res.status(200).json({ success: true, message: 'Email sent successfully' });
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Email sent successfully' 
+        });
       } else {
         const errorText = await response.text();
-        return res.status(500).json({ success: false, message: 'Failed to send email', details: errorText });
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to send email', 
+          details: errorText 
+        });
       }
     } catch (error) {
-      return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+      console.error('Server error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server error', 
+        error: error.message 
+      });
     }
   } else {
-    return res.status(405).json({ success: false, message: 'Only POST method allowed' });
+    return res.status(405).json({ 
+      success: false, 
+      message: 'Only POST method allowed' 
+    });
   }
 }
