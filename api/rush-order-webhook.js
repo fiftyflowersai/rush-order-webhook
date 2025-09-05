@@ -4,6 +4,14 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  console.log('=== VERCEL DEBUG START ===');
+  console.log('Method:', req.method);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body type:', typeof req.body);
+  console.log('Body content:', req.body);
+  console.log('Raw body keys:', req.body ? Object.keys(req.body) : 'no body');
+  console.log('=== VERCEL DEBUG END ===');
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -14,12 +22,21 @@ export default async function handler(req, res) {
       const body = req.body;
       let formData = {};
 
+      console.log('=== PARSING DEBUG ===');
+      console.log('Body is string?', typeof body === 'string');
+      console.log('Contains WebKit?', typeof body === 'string' && body.includes('WebKitFormBoundary'));
+
       if (typeof body === 'string' && body.includes('WebKitFormBoundary')) {
+        console.log('Parsing as multipart form data...');
         // Parse multipart form data
         const boundary = body.match(/------WebKitFormBoundary\w+/)[0];
-        const parts = body.split(boundary);
+        console.log('Found boundary:', boundary);
         
-        for (const part of parts) {
+        const parts = body.split(boundary);
+        console.log('Split into', parts.length, 'parts');
+        
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
           const nameMatch = part.match(/name="([^"]+)"/);
           if (nameMatch) {
             const fieldName = nameMatch[1];
@@ -27,14 +44,17 @@ export default async function handler(req, res) {
             if (valueMatch) {
               const value = valueMatch.split('\r\n')[0];
               formData[fieldName] = value;
+              console.log(`Extracted ${fieldName}: "${value}"`);
             }
           }
         }
       } else if (typeof body === 'object') {
+        console.log('Using body as object directly');
         formData = body;
       }
 
-      console.log('Parsed form data:', formData);
+      console.log('Final parsed formData:', formData);
+      console.log('=== END PARSING DEBUG ===');
 
       // Extract data
       const eventDate = formData.event_date || '';
@@ -43,105 +63,42 @@ export default async function handler(req, res) {
       const name = formData.name || '';
       const email = formData.email || '';
       const phone = formData.phone || '';
-      const billingAddress1 = formData.billing_address_1 || '';
-      const billingAddress2 = formData.billing_address_2 || '';
-      const billingCity = formData.billing_city || '';
-      const billingState = formData.billing_state || '';
-      const billingZip = formData.billing_zip || '';
-      const billingCountry = formData.billing_country || '';
-      const shippingAddress1 = formData.shipping_address_1 || '';
-      const shippingAddress2 = formData.shipping_address_2 || '';
-      const shippingCity = formData.shipping_city || '';
-      const shippingState = formData.shipping_state || '';
-      const shippingZip = formData.shipping_zip || '';
-      const shippingCountry = formData.shipping_country || '';
 
-      console.log('Extracted name:', name, 'email:', email);
+      console.log('=== EXTRACTED VALUES ===');
+      console.log('name:', `"${name}"`);
+      console.log('email:', `"${email}"`);
+      console.log('eventDate:', `"${eventDate}"`);
+      console.log('=== END EXTRACTED VALUES ===');
 
       // Check required fields
       if (!name || !email) {
+        console.log('VALIDATION FAILED - Missing required fields');
         return res.status(400).json({ 
           success: false, 
           message: `Missing required fields. Name: "${name}", Email: "${email}"`,
-          debug: formData
+          debug: {
+            formData,
+            bodyType: typeof body,
+            bodyKeys: body ? Object.keys(body) : 'no body'
+          }
         });
       }
 
-      // Create email content
-      const subject = `RUSH ORDER REQUEST - Event: ${eventDate}`;
-      
-      let message = "RUSH ORDER REQUEST\n\n";
-      message += `Event Date: ${eventDate}\n`;
-      message += `Delivery Date: ${deliveryDate}\n`;
-      message += `Customer: ${name}\n`;
-      message += `Email: ${email}\n`;
-      message += `Phone: ${phone}\n`;
-      message += `Products: ${products}\n\n`;
-      
-      message += "BILLING ADDRESS:\n";
-      message += `${billingAddress1}\n`;
-      if (billingAddress2) message += `${billingAddress2}\n`;
-      message += `${billingCity}, ${billingState} ${billingZip}\n`;
-      message += `${billingCountry}\n\n`;
-      
-      message += "SHIPPING ADDRESS:\n";
-      message += `${shippingAddress1}\n`;
-      if (shippingAddress2) message += `${shippingAddress2}\n`;
-      message += `${shippingCity}, ${shippingState} ${shippingZip}\n`;
-      message += `${shippingCountry}\n`;
+      // If we get here, validation passed
+      console.log('VALIDATION PASSED - proceeding with email');
 
-      // SendGrid API call
-      const data = {
-        personalizations: [{
-          to: [{ email: 'cservice@fiftyflowers.com' }],
-          subject: subject
-        }],
-        from: {
-          email: 'baylorharrison@fiftyflowers.com',
-          name: 'Rush Order System'
-        },
-        reply_to: {
-          email: email,
-          name: name
-        },
-        content: [{
-          type: 'text/plain',
-          value: message
-        }]
-      };
-
-      const apiKey = process.env.SENDGRID_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'SendGrid API key not configured' 
-        });
-      }
-
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
+      // Rest of your SendGrid code...
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Would send email (debugging mode)' 
       });
 
-      if (response.ok) {
-        return res.status(200).json({ 
-          success: true, 
-          message: 'Email sent successfully' 
-        });
-      } else {
-        const errorText = await response.text();
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to send email', 
-          details: errorText 
-        });
-      }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('=== ERROR ===');
+      console.error('Error details:', error);
+      console.error('Stack:', error.stack);
+      console.error('=== END ERROR ===');
+      
       return res.status(500).json({ 
         success: false, 
         message: 'Server error', 
