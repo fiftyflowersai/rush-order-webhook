@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Get form data
     $eventDate = $_POST['event_date'] ?? '';
