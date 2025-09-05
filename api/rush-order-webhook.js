@@ -166,17 +166,28 @@ export default async function handler(req, res) {
         body: JSON.stringify(data)
       });
       
+      console.log('=== SENDGRID DEBUG ===');
+      console.log('SendGrid response status:', response.status);
+      console.log('SendGrid response ok:', response.ok);
+      console.log('API Key exists:', !!apiKey);
+      console.log('API Key length:', apiKey ? apiKey.length : 0);
+      console.log('Email data:', JSON.stringify(data, null, 2));
+      console.log('=== END SENDGRID DEBUG ===');
+      
       if (response.ok) {
+        console.log('SUCCESS: Email sent via SendGrid');
         return res.status(200).json({ 
           success: true, 
           message: 'Email sent successfully' 
         });
       } else {
         const errorText = await response.text();
+        console.log('SENDGRID ERROR:', errorText);
         return res.status(500).json({ 
           success: false, 
           message: 'Failed to send email', 
-          details: errorText 
+          details: errorText,
+          status: response.status
         });
       }
 
