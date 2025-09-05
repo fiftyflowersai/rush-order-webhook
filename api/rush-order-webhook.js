@@ -129,12 +129,56 @@ export default async function handler(req, res) {
       message += `${shippingCity}, ${shippingState} ${shippingZip}\n`;
       message += `${shippingCountry}\n`;
 
-      // For now, return success without actually sending email (for testing)
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Form data parsed successfully!',
-        debug: { name, email, eventDate }
+      // SendGrid API call
+      const data = {
+        personalizations: [{
+          to: [{ email: 'cservice@fiftyflowers.com' }],
+          subject: subject
+        }],
+        from: {
+          email: 'baylorharrison@fiftyflowers.com',
+          name: 'Rush Order System'
+        },
+        reply_to: {
+          email: email,
+          name: name
+        },
+        content: [{
+          type: 'text/plain',
+          value: message
+        }]
+      };
+      
+      const apiKey = process.env.SENDGRID_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'SendGrid API key not configured' 
+        });
+      }
+      
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
       });
+      
+      if (response.ok) {
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Email sent successfully' 
+        });
+      } else {
+        const errorText = await response.text();
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Failed to send email', 
+          details: errorText 
+        });
+      }
 
     } catch (error) {
       console.error('=== ERROR ===');
