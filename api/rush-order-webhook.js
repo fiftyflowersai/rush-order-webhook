@@ -10,28 +10,33 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      // Parse the raw body manually since FormData isn't automatically parsed
+      // Parse multipart form data manually
+      const body = req.body;
       let formData = {};
-      
-      if (req.body) {
-        // If body exists, use it
-        formData = req.body;
-      } else {
-        // If no body, try to parse from raw data
-        const rawBody = req.read();
-        if (rawBody) {
-          const bodyStr = rawBody.toString();
-          const params = new URLSearchParams(bodyStr);
-          for (const [key, value] of params) {
-            formData[key] = value;
+
+      if (typeof body === 'string' && body.includes('WebKitFormBoundary')) {
+        // Parse multipart form data
+        const boundary = body.match(/------WebKitFormBoundary\w+/)[0];
+        const parts = body.split(boundary);
+        
+        for (const part of parts) {
+          const nameMatch = part.match(/name="([^"]+)"/);
+          if (nameMatch) {
+            const fieldName = nameMatch[1];
+            const valueMatch = part.split('\r\n\r\n')[1];
+            if (valueMatch) {
+              const value = valueMatch.split('\r\n')[0];
+              formData[fieldName] = value;
+            }
           }
         }
+      } else if (typeof body === 'object') {
+        formData = body;
       }
 
-      // Log for debugging
-      console.log('Received form data:', formData);
+      console.log('Parsed form data:', formData);
 
-      // Extract data with fallbacks
+      // Extract data
       const eventDate = formData.event_date || '';
       const deliveryDate = formData.delivery_date || '';
       const products = formData.products || '';
@@ -51,11 +56,14 @@ export default async function handler(req, res) {
       const shippingZip = formData.shipping_zip || '';
       const shippingCountry = formData.shipping_country || '';
 
+      console.log('Extracted name:', name, 'email:', email);
+
       // Check required fields
       if (!name || !email) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Missing required fields: name and email' 
+          message: `Missing required fields. Name: "${name}", Email: "${email}"`,
+          debug: formData
         });
       }
 
