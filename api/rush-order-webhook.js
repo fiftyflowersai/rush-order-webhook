@@ -4,57 +4,64 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  console.log('=== VERCEL DEBUG START ===');
-  console.log('Method:', req.method);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body type:', typeof req.body);
-  console.log('Body content:', req.body);
-  console.log('Raw body keys:', req.body ? Object.keys(req.body) : 'no body');
-  console.log('=== VERCEL DEBUG END ===');
-
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method === 'POST') {
     try {
-      // Parse multipart form data manually
-      const body = req.body;
+      // Read raw body since req.body is undefined
+      const getRawBody = () => {
+        return new Promise((resolve) => {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            resolve(body);
+          });
+        });
+      };
+
+      const rawBody = await getRawBody();
+      console.log('=== RAW BODY DEBUG ===');
+      console.log('Raw body length:', rawBody.length);
+      console.log('Raw body preview:', rawBody.substring(0, 200));
+      console.log('=== END RAW BODY DEBUG ===');
+
       let formData = {};
 
-      console.log('=== PARSING DEBUG ===');
-      console.log('Body is string?', typeof body === 'string');
-      console.log('Contains WebKit?', typeof body === 'string' && body.includes('WebKitFormBoundary'));
-
-      if (typeof body === 'string' && body.includes('WebKitFormBoundary')) {
-        console.log('Parsing as multipart form data...');
-        // Parse multipart form data
-        const boundary = body.match(/------WebKitFormBoundary\w+/)[0];
-        console.log('Found boundary:', boundary);
+      if (rawBody && rawBody.includes('WebKitFormBoundary')) {
+        console.log('Parsing multipart form data from raw body...');
         
-        const parts = body.split(boundary);
-        console.log('Split into', parts.length, 'parts');
-        
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i];
-          const nameMatch = part.match(/name="([^"]+)"/);
-          if (nameMatch) {
-            const fieldName = nameMatch[1];
-            const valueMatch = part.split('\r\n\r\n')[1];
-            if (valueMatch) {
-              const value = valueMatch.split('\r\n')[0];
-              formData[fieldName] = value;
-              console.log(`Extracted ${fieldName}: "${value}"`);
+        // Extract boundary
+        const boundaryMatch = rawBody.match(/------WebKitFormBoundary\w+/);
+        if (boundaryMatch) {
+          const boundary = boundaryMatch[0];
+          console.log('Found boundary:', boundary);
+          
+          const parts = rawBody.split(boundary);
+          console.log('Split into', parts.length, 'parts');
+          
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const nameMatch = part.match(/name="([^"]+)"/);
+            if (nameMatch) {
+              const fieldName = nameMatch[1];
+              const valueStart = part.indexOf('\r\n\r\n');
+              if (valueStart !== -1) {
+                const valueSection = part.substring(valueStart + 4);
+                const valueEnd = valueSection.indexOf('\r\n');
+                const value = valueEnd !== -1 ? valueSection.substring(0, valueEnd) : valueSection;
+                formData[fieldName] = value;
+                console.log(`Extracted ${fieldName}: "${value}"`);
+              }
             }
           }
         }
-      } else if (typeof body === 'object') {
-        console.log('Using body as object directly');
-        formData = body;
       }
 
       console.log('Final parsed formData:', formData);
-      console.log('=== END PARSING DEBUG ===');
 
       // Extract data
       const eventDate = formData.event_date || '';
@@ -63,6 +70,18 @@ export default async function handler(req, res) {
       const name = formData.name || '';
       const email = formData.email || '';
       const phone = formData.phone || '';
+      const billingAddress1 = formData.billing_address_1 || '';
+      const billingAddress2 = formData.billing_address_2 || '';
+      const billingCity = formData.billing_city || '';
+      const billingState = formData.billing_state || '';
+      const billingZip = formData.billing_zip || '';
+      const billingCountry = formData.billing_country || '';
+      const shippingAddress1 = formData.shipping_address_1 || '';
+      const shippingAddress2 = formData.shipping_address_2 || '';
+      const shippingCity = formData.shipping_city || '';
+      const shippingState = formData.shipping_state || '';
+      const shippingZip = formData.shipping_zip || '';
+      const shippingCountry = formData.shipping_country || '';
 
       console.log('=== EXTRACTED VALUES ===');
       console.log('name:', `"${name}"`);
@@ -78,8 +97,8 @@ export default async function handler(req, res) {
           message: `Missing required fields. Name: "${name}", Email: "${email}"`,
           debug: {
             formData,
-            bodyType: typeof body,
-            bodyKeys: body ? Object.keys(body) : 'no body'
+            rawBodyLength: rawBody.length,
+            hasData: rawBody.includes('WebKitFormBoundary')
           }
         });
       }
@@ -87,10 +106,34 @@ export default async function handler(req, res) {
       // If we get here, validation passed
       console.log('VALIDATION PASSED - proceeding with email');
 
-      // Rest of your SendGrid code...
+      // Create email content
+      const subject = `RUSH ORDER REQUEST - Event: ${eventDate}`;
+      
+      let message = "RUSH ORDER REQUEST\n\n";
+      message += `Event Date: ${eventDate}\n`;
+      message += `Delivery Date: ${deliveryDate}\n`;
+      message += `Customer: ${name}\n`;
+      message += `Email: ${email}\n`;
+      message += `Phone: ${phone}\n`;
+      message += `Products: ${products}\n\n`;
+      
+      message += "BILLING ADDRESS:\n";
+      message += `${billingAddress1}\n`;
+      if (billingAddress2) message += `${billingAddress2}\n`;
+      message += `${billingCity}, ${billingState} ${billingZip}\n`;
+      message += `${billingCountry}\n\n`;
+      
+      message += "SHIPPING ADDRESS:\n";
+      message += `${shippingAddress1}\n`;
+      if (shippingAddress2) message += `${shippingAddress2}\n`;
+      message += `${shippingCity}, ${shippingState} ${shippingZip}\n`;
+      message += `${shippingCountry}\n`;
+
+      // For now, return success without actually sending email (for testing)
       return res.status(200).json({ 
         success: true, 
-        message: 'Would send email (debugging mode)' 
+        message: 'Form data parsed successfully!',
+        debug: { name, email, eventDate }
       });
 
     } catch (error) {
